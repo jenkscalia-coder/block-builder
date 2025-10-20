@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1"/>
-<title>Advanced Planner v2.2 — HUD Fixed, Dual Context Menus, Full Exports</title>
+<title>Advanced Planner v2.2.1 — FAB Add Room</title>
 <style>
 :root{--bg:#0b0f15;--panel:#10161f;--ink:#e6edf3;--muted:#9fb0c2;--grid:#1d2533;--btn:#141c28;--btn-b:#25344a;--accent:#58a6ff;--danger:#ff6b6b}
 html,body{height:100%;margin:0;background:var(--bg);color:var(--ink);font:14px/1.45 Inter,system-ui,Segoe UI,Roboto,Arial}
@@ -50,6 +50,19 @@ html,body{height:100%;margin:0;background:var(--bg);color:var(--ink);font:14px/1
 .menu{position:absolute;right:0;top:100%;margin-top:6px;background:#0f151f;border:1px solid #223044;border-radius:10px;box-shadow:0 16px 40px rgba(0,0,0,.55);padding:6px;display:none;z-index:90}
 .menu button{width:100%;text-align:left;border:0;background:transparent;color:#dfe9f7;padding:8px 10px;border-radius:8px;cursor:pointer}
 .menu button:hover{background:#172131}
+/* Floating Add (+) */
+.fab{position:absolute;right:16px;bottom:16px;width:56px;height:56px;border-radius:16px;background:#1e6bff;border:1px solid #1652f0;color:#fff;font-weight:800;font-size:28px;line-height:0;display:grid;place-items:center;cursor:pointer;box-shadow:0 18px 44px rgba(0,0,0,.45)}
+.fab:active{transform:translateY(1px)}
+/* Add-room sheet */
+.sheet{position:absolute;right:16px;bottom:86px;background:var(--panel);border:1px solid #1b2230;border-radius:14px;box-shadow:0 20px 60px rgba(0,0,0,.55);width:300px;display:none;z-index:95}
+.sheet header{padding:10px 12px;border-bottom:1px solid #1b2230;font-weight:600}
+.sheet .body{padding:12px;display:grid;gap:10px}
+.sheet label{font-size:12px;color:var(--muted)}
+.sheet input[type=text],.sheet input[type=number]{width:100%;background:#101722;border:1px solid #1f2836;border-radius:10px;color:#e6edf3;padding:8px 10px;font:inherit}
+.swatchRow{display:grid;grid-template-columns:repeat(7,1fr);gap:6px}
+.sw{height:22px;border-radius:6px;border:1px solid #223046;cursor:pointer}
+.sw[data-sel="1"]{outline:2px solid var(--accent)}
+.sheet .actions{display:flex;gap:8px;margin-top:6px}
 </style>
 </head>
 <body>
@@ -75,13 +88,13 @@ html,body{height:100%;margin:0;background:var(--bg);color:var(--ink);font:14px/1
         <button data-x="dxf">DXF (current level)</button>
       </div>
     </div>
-    <button id="addRoom" class="btn">Add Room</button>
   </div>
 
   <div class="stageWrap" id="wrap">
     <div id="stage" class="stage gridOn" aria-label="planning canvas">
       <div id="hud" class="hud"><div class="dims" id="dimsText">Hover a block…</div></div>
       <div id="world" class="world"></div>
+      <button id="fab" class="fab" title="Add Room" aria-label="Add Room">+</button>
     </div>
 
     <!-- Add Room Sheet -->
@@ -133,25 +146,9 @@ function resumeIsoIfNeeded(was){if(was)wrap.classList.add('isometric')}
 /* ===== Dynamic floors ===== */
 let levels=[];let ghosts=[];let currentLevel=0;
 const tabs=document.getElementById('tabs');
-function makeLevel(idx){
-  const layer=document.createElement('div');layer.className='level-layer';layer.id='level'+idx;
-  const ghost=document.createElement('div');ghost.className='level-layer ghost';ghost.id='ghost'+idx;ghost.style.display='none';
-  world.appendChild(layer);world.appendChild(ghost);return {layer,ghost};
-}
-function refreshTabs(){
-  tabs.innerHTML='';
-  levels.forEach((L,i)=>{
-    const b=document.createElement('button');b.className='tab';b.dataset.level=i;b.textContent=(i===0?'Ground':`Level ${i}`);
-    b.dataset.active=(i===currentLevel?'1':'0');b.addEventListener('click',()=>setLevel(i));tabs.appendChild(b);
-  });
-}
-function setLevel(i){
-  currentLevel=i;
-  levels.forEach((L,idx)=>{L.layer.style.display=idx===i?'block':'none'});
-  ghosts.forEach(g=>g.style.display='none');
-  if(i>0){const g=ghosts[i],prev=levels[i-1].layer;g.innerHTML='';prev.querySelectorAll('.room').forEach(src=>{const gh=src.cloneNode(true);gh.classList.remove('sel');gh.style.pointerEvents='none';g.appendChild(gh)});g.style.display='block'}
-  refreshTabs();
-}
+function makeLevel(idx){const layer=document.createElement('div');layer.className='level-layer';layer.id='level'+idx;const ghost=document.createElement('div');ghost.className='level-layer ghost';ghost.id='ghost'+idx;ghost.style.display='none';world.appendChild(layer);world.appendChild(ghost);return {layer,ghost};}
+function refreshTabs(){tabs.innerHTML='';levels.forEach((L,i)=>{const b=document.createElement('button');b.className='tab';b.dataset.level=i;b.textContent=(i===0?'Ground':`Level ${i}`);b.dataset.active=(i===currentLevel?'1':'0');b.addEventListener('click',()=>setLevel(i));tabs.appendChild(b)})}
+function setLevel(i){currentLevel=i;levels.forEach((L,idx)=>{L.layer.style.display=idx===i?'block':'none'});ghosts.forEach(g=>g.style.display='none');if(i>0){const g=ghosts[i],prev=levels[i-1].layer;g.innerHTML='';prev.querySelectorAll('.room').forEach(src=>{const gh=src.cloneNode(true);gh.classList.remove('sel');gh.style.pointerEvents='none';g.appendChild(gh)});g.style.display='block'}refreshTabs()}
 function addLevel(){const i=levels.length;const pair=makeLevel(i);levels.push(pair);ghosts.push(pair.ghost);if(i===0)pair.layer.style.display='block';else pair.layer.style.display='none';refreshTabs();return i}
 function duplicateLevel(i){const idx=levels.length;const pair=makeLevel(idx);levels.push(pair);ghosts.push(pair.ghost);levels[i].layer.querySelectorAll('.room').forEach(n=>{const c=n.cloneNode(true);pair.layer.appendChild(c);attachRoom(c)});setLevel(idx)}
 function removeLevel(i){if(levels.length<=1){alert('Cannot remove the last floor.');return}world.removeChild(levels[i].layer);world.removeChild(ghosts[i]);levels.splice(i,1);ghosts.splice(i,1);setLevel(Math.max(0,i-1));refreshTabs()}
@@ -167,27 +164,11 @@ window.addEventListener('keydown',e=>{if(e.code==='Space'){spacePan=true;documen
 window.addEventListener('keyup',e=>{if(e.code==='Space'){spacePan=false;document.body.style.cursor='auto'} if(!e.ctrlKey){ctrlSnap=false}});
 
 /* ===== Rooms & geometry ===== */
-function m2FromSize(pxW,pxH){
-  const m2ps=parseFloat(document.getElementById('m2PerSquare').value)||4;
-  const metersPerGrid=Math.sqrt(m2ps);
-  const width_m=(pxW/GRID)*metersPerGrid, height_m=(pxH/GRID)*metersPerGrid;
-  return {width_m,height_m,area_m2:width_m*height_m};
-}
+function m2FromSize(pxW,pxH){const m2ps=parseFloat(document.getElementById('m2PerSquare').value)||4;const metersPerGrid=Math.sqrt(m2ps);const width_m=(pxW/GRID)*metersPerGrid, height_m=(pxH/GRID)*metersPerGrid;return {width_m,height_m,area_m2:width_m*height_m}}
 function updateAreaLabel(el){const a=el.querySelector('.area');const {area_m2}=m2FromSize(el.clientWidth,el.clientHeight);a.textContent=`${area_m2.toFixed(0)} m²`}
 function updateHud(el){const {width_m,height_m,area_m2}=m2FromSize(el.clientWidth,el.clientHeight);dimsText.textContent=`${width_m.toFixed(2)}m × ${height_m.toFixed(2)}m · ${area_m2.toFixed(0)} m²`}
-
-function createRoomEl(name,color,x,y,w,h,areaText){
-  const el=document.createElement('div');el.className='room';el.style.left=x+'px';el.style.top=y+'px';el.style.width=(w||120)+'px';el.style.height=(h||90)+'px';el.style.background=color;
-  const label=document.createElement('div');label.className='label';label.textContent=name||'Room';label.contentEditable=true;
-  const area=document.createElement('div');area.className='area';area.textContent=areaText||'60 m²';area.title='Click to edit area (m²)';
-  const handle=document.createElement('div');handle.className='handle';el.append(label,area,handle);return el;
-}
-function createRoom({name='Room',m2=60,color=COLORS[1],x=0,y=0}={}){
-  const m2ps=parseFloat(document.getElementById('m2PerSquare').value)||4, metersPerGrid=Math.sqrt(m2ps);
-  const targetWidth_m=Math.sqrt(m2), targetHeight_m=Math.max(1,targetWidth_m*0.7);
-  const pxW=Math.max(40,targetWidth_m/metersPerGrid*GRID), pxH=Math.max(40,targetHeight_m/metersPerGrid*GRID);
-  const el=createRoomEl(name,color,x,y,pxW,pxH,`${m2.toFixed(0)} m²`);levels[currentLevel].layer.appendChild(el);attachRoom(el);return el;
-}
+function createRoomEl(name,color,x,y,w,h,areaText){const el=document.createElement('div');el.className='room';el.style.left=x+'px';el.style.top=y+'px';el.style.width=(w||120)+'px';el.style.height=(h||90)+'px';el.style.background=color;const label=document.createElement('div');label.className='label';label.textContent=name||'Room';label.contentEditable=true;const area=document.createElement('div');area.className='area';area.textContent=areaText||'60 m²';area.title='Click to edit area (m²)';const handle=document.createElement('div');handle.className='handle';el.append(label,area,handle);return el}
+function createRoom({name='Room',m2=60,color=COLORS[1],x=0,y=0}={}){const m2ps=parseFloat(document.getElementById('m2PerSquare').value)||4, metersPerGrid=Math.sqrt(m2ps);const targetWidth_m=Math.sqrt(m2), targetHeight_m=Math.max(1,targetWidth_m*0.7);const pxW=Math.max(40,targetWidth_m/metersPerGrid*GRID), pxH=Math.max(40,targetHeight_m/metersPerGrid*GRID);const el=createRoomEl(name,color,x,y,pxW,pxH,`${m2.toFixed(0)} m²`);levels[currentLevel].layer.appendChild(el);attachRoom(el);return el}
 
 /* Selection */
 let selection=new Set();function clearSel(){selection.forEach(n=>n.classList.remove('sel'));selection.clear()}
@@ -195,18 +176,7 @@ function toggleSel(el,multi){if(!multi)clearSel();if(selection.has(el)){el.class
 function getCurrentRooms(){return[...levels[currentLevel].layer.querySelectorAll('.room')]}
 
 /* Ctrl magnet-snap */
-function applyCtrlSnap(primary){
-  if(!ctrlSnap) return;
-  const tol=10, others=getCurrentRooms().filter(n=>!selection.has(n)); if(!others.length) return;
-  const lx=parseFloat(primary.style.left), ty=parseFloat(primary.style.top), rx=lx+primary.clientWidth, by=ty+primary.clientHeight, cx=lx+primary.clientWidth/2, cy=ty+primary.clientHeight/2;
-  let offX=0, offY=0;
-  for(const o of others){
-    const ol=parseFloat(o.style.left), ot=parseFloat(o.style.top), orr=ol+o.clientWidth, ob=ot+o.clientHeight, ocx=ol+o.clientWidth/2, ocy=ot+o.clientHeight/2;
-    if(Math.abs(ty-ot)<tol) offY=ot-ty; if(Math.abs(by-ob)<tol) offY=ob-by; if(Math.abs(cy-ocy)<tol) offY=ocy-cy;
-    if(Math.abs(lx-ol)<tol) offX=ol-lx; if(Math.abs(rx-orr)<tol) offX=orr-rx; if(Math.abs(cx-ocx)<tol) offX=ocx-cx;
-  }
-  if(offX||offY){selection.forEach(n=>{n.style.left=(parseFloat(n.style.left)+offX)+'px';n.style.top=(parseFloat(n.style.top)+offY)+'px'})}
-}
+function applyCtrlSnap(primary){if(!ctrlSnap) return;const tol=10, others=getCurrentRooms().filter(n=>!selection.has(n)); if(!others.length) return;const lx=parseFloat(primary.style.left), ty=parseFloat(primary.style.top), rx=lx+primary.clientWidth, by=ty+primary.clientHeight, cx=lx+primary.clientWidth/2, cy=ty+primary.clientHeight/2;let offX=0, offY=0;for(const o of others){const ol=parseFloat(o.style.left), ot=parseFloat(o.style.top), orr=ol+o.clientWidth, ob=ot+o.clientHeight, ocx=ol+o.clientWidth/2, ocy=ot+o.clientHeight/2;if(Math.abs(ty-ot)<tol) offY=ot-ty; if(Math.abs(by-ob)<tol) offY=ob-by; if(Math.abs(cy-ocy)<tol) offY=ocy-cy;if(Math.abs(lx-ol)<tol) offX=ol-lx; if(Math.abs(rx-orr)<tol) offX=orr-rx; if(Math.abs(cx-ocx)<tol) offX=ocx-cx}if(offX||offY){selection.forEach(n=>{n.style.left=(parseFloat(n.style.left)+offX)+'px';n.style.top=(parseFloat(n.style.top)+offY)+'px'})}}
 
 /* Attach interactions to a room */
 function attachRoom(el){
@@ -221,12 +191,7 @@ function attachRoom(el){
     if(e.altKey){const ns=new Set();selection.forEach(n=>{const c=n.cloneNode(true);levels[currentLevel].layer.appendChild(c);attachRoom(c);c.style.left=(parseFloat(n.style.left)+GRID)+'px';c.style.top=(parseFloat(n.style.top)+GRID)+'px';ns.add(c)});clearSel();ns.forEach(n=>{n.classList.add('sel');selection.add(n)})}
     isoWas=suspendIsoIfAny();dragging=true;startScreen={x:e.clientX,y:e.clientY};startPos.clear();selection.forEach(n=>startPos.set(n,{l:parseFloat(n.style.left),t:parseFloat(n.style.top)}));el.setPointerCapture(e.pointerId);
   });
-  el.addEventListener('pointermove',e=>{
-    if(!dragging)return;
-    const dx=(e.clientX-startScreen.x)/scale, dy=(e.clientY-startScreen.y)/scale;
-    selection.forEach(n=>{const s=startPos.get(n);n.style.left=(s.l+dx)+'px';n.style.top=(s.t+dy)+'px'});
-    applyCtrlSnap(el); updateHud(el);
-  });
+  el.addEventListener('pointermove',e=>{if(!dragging)return;const dx=(e.clientX-startScreen.x)/scale, dy=(e.clientY-startScreen.y)/scale;selection.forEach(n=>{const s=startPos.get(n);n.style.left=(s.l+dx)+'px';n.style.top=(s.t+dy)+'px'});applyCtrlSnap(el);updateHud(el)});
   el.addEventListener('pointerup',()=>{if(!dragging)return;dragging=false;updateHud(el);resumeIsoIfNeeded(isoWas)});
   // Resize
   const h=el.querySelector('.handle');let resizing=false,startSize={w:0,h:0},startRS={x:0,y:0},isoWasRS=false;
@@ -271,8 +236,8 @@ blockCtx.addEventListener('click',e=>{
 
 /* ===== Exporters (PNG, SVG, DXF) ===== */
 function nodesBBox(nodes){const xs=nodes.map(n=>parseFloat(n.style.left)),ys=nodes.map(n=>parseFloat(n.style.top)),rs=nodes.map(n=>parseFloat(n.style.left)+n.clientWidth),bs=nodes.map(n=>parseFloat(n.style.top)+n.clientHeight);return{l:Math.min(...xs),t:Math.min(...ys),r:Math.max(...rs),b:Math.max(...bs)}}
-function exportPNG(){const nodes=getCurrentRooms();if(!nodes.length)return alert('Nothing to export.');const bb=nodesBBox(nodes),pad=40,w=Math.ceil(bb.r-bb.l+pad*2),h=Math.ceil(bb.b-bb.t+pad*2);const c=document.createElement('canvas');c.width=w;c.height=h;const x=c.getContext('2d');x.fillStyle='#0b0f15';x.fillRect(0,0,w,h);if(gridEnabled){x.strokeStyle='#1d2533';x.lineWidth=1;for(let i=pad;i<w-pad;i+=GRID){x.beginPath();x.moveTo(i,0);x.lineTo(i,h);x.stroke()}for(let j=pad;j<h-pad;j+=GRID){x.beginPath();x.moveTo(0,j);x.lineTo(w,j);x.stroke()}}nodes.forEach(n=>{const nx=parseFloat(n.style.left)-bb.l+pad,ny=parseFloat(n.style.top)-bb.t+pad,ww=n.clientWidth,hh=n.clientHeight;x.fillStyle=n.style.background;x.fillRect(nx,ny,ww,hh);x.fillStyle='#0c1016';x.font='12px Inter,Arial';x.fillText(n.querySelector('.label').textContent,nx+8,ny+16);x.fillText(n.querySelector('.area').textContent,nx+8,ny+hh-10)});c.toBlob(b=>{const a=document.createElement('a');a.href=URL.createObjectURL(b);a.download='plan.png';a.click();URL.revokeObjectURL(a.href)})}
-function exportSVG(){const nodes=getCurrentRooms();if(!nodes.length)return alert('Nothing to export.');const bb=nodesBBox(nodes),pad=40,w=Math.ceil(bb.r-bb.l+pad*2),h=Math.ceil(bb.b-bb.t+pad*2),esc=s=>s.replace(/&/g,'&amp;').replace(/</g,'&lt;');let s=`<?xml version="1.0" encoding="UTF-8"?>\n<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}">\n<rect x="0" y="0" width="${w}" height="${h}" fill="#0b0f15"/>`;if(gridEnabled){for(let i=pad;i<w-pad;i+=GRID)s+=`<line x1="${i}" y1="0" x2="${i}" y2="${h}" stroke="#1d2533" stroke-width="1"/>`;for(let j=pad;j<h-pad;j+=GRID)s+=`<line x1="0" y1="${j}" x2="${w}" y2="${j}" stroke="#1d2533" stroke-width="1"/>`}nodes.forEach(n=>{const x=parseFloat(n.style.left)-bb.l+pad,y=parseFloat(n.style.top)-bb.t+pad,ww=n.clientWidth,hh=n.clientHeight,fill=n.style.background||'#888',name=esc(n.querySelector('.label').textContent),area=esc(n.querySelector('.area').textContent);s+=`<rect x="${x}" y="${y}" width="${ww}" height="${hh}" fill="${fill}"/>`;s+=`<text x="${x+8}" y="${y+16}" font-family="Inter,Arial" font-size="12" fill="#0c1016">${name}</text>`;s+=`<text x="${x+8}" y="${y+hh-10}" font-family="Inter,Arial" font-size="12" fill="#0c1016">${area}</text>`});s+='</svg>';const b=new Blob([s],{type:'image/svg+xml'}),a=document.createElement('a');a.href=URL.createObjectURL(b);a.download='plan.svg';a.click();URL.revokeObjectURL(a.href)}
+function exportPNG(){const nodes=getCurrentRooms();if(!nodes.length)return alert('Nothing to export.');const bb=nodesBBox(nodes),pad=40,w=Math.ceil(bb.r-bb.l+pad*2),h=Math.ceil(bb.b-bb.t+pad*2);const c=document.createElement('canvas');c.width=w;c.height=h;const x=c.getContext('2d');x.fillStyle='#0b0f15';x.fillRect(0,0,w,h);if(gridEnabled){x.strokeStyle='#1d2533';x.lineWidth=1;for(let i=pad;i<w-pad;i+=GRID){x.beginPath();x.moveTo(i,0);x.lineTo(i,h);x.stroke()}for(let j=pad;j<h-pad;j+=GRID){x.beginPath();x.moveTo(0,j);x.lineTo(w,j);x.stroke()}}nodes.forEach(n=>{const xx=parseFloat(n.style.left)-bb.l+pad,yy=parseFloat(n.style.top)-bb.t+pad,ww=n.clientWidth,hh=n.clientHeight;x.fillStyle=n.style.background;x.fillRect(xx,yy,ww,hh);x.fillStyle='#0c1016';x.font='12px Inter,Arial';x.fillText(n.querySelector('.label').textContent,xx+8,yy+16);x.fillText(n.querySelector('.area').textContent,xx+8,yy+hh-10)});c.toBlob(b=>{const a=document.createElement('a');a.href=URL.createObjectURL(b);a.download='plan.png';a.click();URL.revokeObjectURL(a.href)})}
+function exportSVG(){const nodes=getCurrentRooms();if(!nodes.length)return alert('Nothing to export.');const bb=nodesBBox(nodes),pad=40,w=Math.ceil(bb.r-bb.l+pad*2),h=Math.ceil(bb.b-bb.t+pad*2),esc=s=>s.replace(/&/g,'&amp;').replace(/</g,'&lt;');let s=`<?xml version="1.0" encoding="UTF-8"?>\n<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}">\n<rect x="0" y="0" width="${w}" height="${h}" fill="#0b0f15"/>`;if(gridEnabled){for(let i=pad;i<w-pad;i+=GRID)s+=`<line x1="${i}" y1="0" x2="${i}" y2="${h}" stroke="#1d2533" stroke-width="1"/>`;for(let j=pad;j<h-pad;j+=GRID)s+=`<line x1="0" y1="${j}" x2="${w}" y2="${j}" stroke="#1d2533" stroke-width="1"/>`}nodes.forEach(n=>{const xx=parseFloat(n.style.left)-bb.l+pad,yy=parseFloat(n.style.top)-bb.t+pad,ww=n.clientWidth,hh=n.clientHeight,fill=n.style.background||'#888',name=esc(n.querySelector('.label').textContent),area=esc(n.querySelector('.area').textContent);s+=`<rect x="${xx}" y="${yy}" width="${ww}" height="${hh}" fill="${fill}"/>`;s+=`<text x="${xx+8}" y="${yy+16}" font-family="Inter,Arial" font-size="12" fill="#0c1016">${name}</text>`;s+=`<text x="${xx+8}" y="${yy+hh-10}" font-family="Inter,Arial" font-size="12" fill="#0c1016">${area}</text>`});s+='</svg>';const b=new Blob([s],{type:'image/svg+xml'}),a=document.createElement('a');a.href=URL.createObjectURL(b);a.download='plan.svg';a.click();URL.revokeObjectURL(a.href)}
 function exportDXF(){const nodes=getCurrentRooms();if(!nodes.length)return alert('Nothing to export.');const bb=nodesBBox(nodes);const rect=(x,y,w,h,L)=>`0
 LWPOLYLINE
 8
@@ -319,32 +284,34 @@ ENDSEC
 SECTION
 2
 ENTITIES
-`;nodes.forEach(n=>{const x=parseFloat(n.style.left)-bb.l,y=parseFloat(n.style.top)-bb.t,w=n.clientWidth,h=n.clientHeight,name=n.querySelector('.label').textContent.replace(/\n/g,' '),area=n.querySelector('.area').textContent.replace(/\n/g,' ');d+=rect(x,y,w,h,'ROOM');d+=text(x+4,y+6,name,'TEXT',3);d+=text(x+4,y+h-6,area,'TEXT',3)});d+=`0
+`;nodes.forEach(n=>{const xx=parseFloat(n.style.left)-bb.l,yy=parseFloat(n.style.top)-bb.t,w=n.clientWidth,h=n.clientHeight,name=n.querySelector('.label').textContent.replace(/\n/g,' '),area=n.querySelector('.area').textContent.replace(/\n/g,' ');d+=rect(xx,yy,w,h,'ROOM');d+=text(xx+4,yy+6,name,'TEXT',3);d+=text(xx+4,yy+h-6,area,'TEXT',3)});d+=`0
 ENDSEC
 0
 EOF`;const b=new Blob([d],{type:'application/dxf'}),a=document.createElement('a');a.href=URL.createObjectURL(b);a.download='plan.dxf';a.click();URL.revokeObjectURL(a.href)}
 
-/* ===== Toolbar buttons ===== */
+/* ===== Toolbar / FAB ===== */
 document.getElementById('toggleIso').addEventListener('click',()=>{wrap.classList.toggle('isometric');document.getElementById('toggleIso').textContent=wrap.classList.contains('isometric')?'3D':'2D'});
 const exportBtn=document.getElementById('exportBtn'),exportMenu=document.getElementById('exportMenu');
 exportBtn.addEventListener('click',()=>{exportMenu.style.display=exportMenu.style.display==='block'?'none':'block'});
 document.addEventListener('pointerdown',e=>{if(!exportMenu.contains(e.target)&&e.target!==exportBtn)exportMenu.style.display='none'});
 exportMenu.addEventListener('click',e=>{const t=e.target.closest('button')?.dataset?.x;if(!t)return;if(t==='png')exportPNG();if(t==='svg')exportSVG();if(t==='dxf')exportDXF();exportMenu.style.display='none'});
-document.getElementById('addLevel').addEventListener('click',()=>{const idx=addLevel();setLevel(idx)});
-document.getElementById('dupLevel').addEventListener('click',()=>duplicateLevel(currentLevel));
-document.getElementById('delLevel').addEventListener('click',()=>removeLevel(currentLevel));
 
-/* ===== Add-room Sheet ===== */
-const sheet=document.getElementById('sheet'),nameIn=document.getElementById('nameIn'),areaIn=document.getElementById('areaIn'),swWrap=document.getElementById('swatches'),addBtn=document.getElementById('addBtn'),cancelBtn=document.getElementById('cancelBtn');
+/* FAB + Add-room Sheet */
+const fab=document.getElementById('fab'),sheet=document.getElementById('sheet'),nameIn=document.getElementById('nameIn'),areaIn=document.getElementById('areaIn'),swWrap=document.getElementById('swatches'),addBtn=document.getElementById('addBtn'),cancelBtn=document.getElementById('cancelBtn');
 let chosenColor=COLORS[1];function selectSwatch(n){[...swWrap.children].forEach(c=>c.dataset.sel='0');n.dataset.sel='1'}
 COLORS.forEach(c=>{const d=document.createElement('div');d.className='sw';d.style.background=c;d.title=c;d.addEventListener('click',()=>{selectSwatch(d);chosenColor=c});swWrap.appendChild(d)});selectSwatch(swWrap.children[1]);
 function openSheet(){sheet.style.display='block';nameIn.value='';areaIn.value=60;chosenColor=COLORS[1];selectSwatch(swWrap.children[1])}
 function closeSheet(){sheet.style.display='none'}
-document.getElementById('addRoom').addEventListener('click',openSheet);
+fab.addEventListener('click',openSheet);
 cancelBtn.addEventListener('click',closeSheet);
 addBtn.addEventListener('click',()=>{const rect=stage.getBoundingClientRect(),cx=(rect.width/2-offset.x)/scale,cy=(rect.height/2-offset.y)/scale;createRoom({name:nameIn.value.trim()||'Room',m2:Math.max(1,parseFloat(areaIn.value)||60),color:chosenColor,x:cx-80,y:cy-60});closeSheet()});
 
-/* ===== Starter demo ===== */
+/* Floors */
+document.getElementById('addLevel').addEventListener('click',()=>{const idx=addLevel();setLevel(idx)});
+document.getElementById('dupLevel').addEventListener('click',()=>duplicateLevel(currentLevel));
+document.getElementById('delLevel').addEventListener('click',()=>removeLevel(currentLevel));
+
+/* Demo */
 createRoom({name:'Childcare 1',m2:70,color:COLORS[0],x:0,y:0});
 createRoom({name:'Kinder 1',m2:110,color:COLORS[1],x:240,y:0});
 </script>
