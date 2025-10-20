@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>Advanced Planner v2.0 – Dark Minimal</title>
+<title>Advanced Planner v2.0.1 – Dark Minimal</title>
 <style>
   :root{
     --bg:#0b0f15; --panel:#131a22; --ink:#e6edf3; --muted:#9fb0c2; --grid:#202734;
@@ -88,7 +88,7 @@
   .sheet .body{padding:12px;display:grid;gap:10px}
   .sheet label{font-size:12px;color:var(--muted)}
   .sheet input[type="text"], .sheet input[type="number"]{
-    width:100%;background:#101722;border:1px solid #1f2836;border-radius:10px;color:var(--ink);padding:8px 10px;font:inherit}
+    width:100%;background:#101722;border:1px solid #1f2836;border-radius:10px;color:#var(--ink);padding:8px 10px;font:inherit}
   .swatchRow{display:grid;grid-template-columns:repeat(7,1fr);gap:6px}
   .sw{height:22px;border-radius:6px;border:1px solid #223046;cursor:pointer}
   .sw[data-sel="1"]{outline:2px solid var(--accent)}
@@ -122,7 +122,7 @@
     </div>
 
     <div class="spacer"></div>
-    <span class="hint">Wheel = Zoom · Space/Right-drag = Pan · Snap-to-grid · Alt+Drag = Duplicate · Shift+Click = Multi-select</span>
+    <span class="hint">Wheel = Zoom · Space/Right-drag = Pan · Snap-to-grid (on release) · Alt+Drag = Duplicate · Shift+Click = Multi-select</span>
 
     <button id="toggleIso" class="btn">2D</button>
 
@@ -288,9 +288,7 @@ function loadLevel(idx){
 function setLevel(idx){
   currentLevel = idx;
   localStorage.setItem('ap.level', String(idx));
-  // show current level, hide others
   levels.forEach((l,i)=> l.style.display = i===idx ? 'block' : 'none');
-  // ghost = previous level only
   ghosts.forEach(g=>{ if(g) g.style.display='none'; });
   if (idx>0){
     const g = ghosts[idx];
@@ -306,7 +304,6 @@ function setLevel(idx){
       g.style.display='block';
     }
   }
-  // tabs state
   [...document.querySelectorAll('.tab')].forEach(t=>t.dataset.active = (parseInt(t.dataset.level,10)===idx?'1':'0'));
 }
 loadLevel(0); loadLevel(1); loadLevel(2);
@@ -343,8 +340,8 @@ stage.addEventListener('pointermove', (e)=>{
   applyTransform();
 });
 stage.addEventListener('pointerup', ()=>{ panning=false; });
-window.addEventListener('keydown', (e)=>{ if(e.code==='Space'){spacePan=true;document.body.style.cursor='grabbing';}});
-window.addEventListener('keyup',   (e)=>{ if(e.code==='Space'){spacePan=false;document.body.style.cursor='auto';}});
+window.addEventListener('keydown', (e)=>{ if (e.code==='Space'){spacePan=true;document.body.style.cursor='grabbing';}});
+window.addEventListener('keyup',   (e)=>{ if (e.code==='Space'){spacePan=false;document.body.style.cursor='auto';}});
 
 /* ===========================================================
    Room creation + interactions
@@ -372,10 +369,9 @@ function createRoomEl(name, color, x, y, w, h, areaText){
 }
 
 function createRoom({name='Room', m2=60, color=COLORS[0], x=0, y=0}){
-  // initial rectangle based on m²
   const m2ps = parseFloat(document.getElementById('m2PerSquare').value)||4;
   const squares = Math.max(1, m2 / m2ps);
-  let w = Math.sqrt(squares) * GRID;
+  let w = Math.sqrt(squares) * 40;
   let h = w * 0.7;
   const el = createRoomEl(name, color, x, y, w, h, `${m2.toFixed(0)} m²`);
   levels[currentLevel].appendChild(el);
@@ -386,7 +382,6 @@ function createRoom({name='Room', m2=60, color=COLORS[0], x=0, y=0}){
 }
 
 function refreshGhost(){
-  // rebuild ghost of current level+1 (if exists), since this level is the "below" for next
   if (currentLevel+1 < ghosts.length && ghosts[currentLevel+1]){
     const g = ghosts[currentLevel+1];
     g.innerHTML = '';
@@ -421,11 +416,11 @@ function clearGuides(){ guides.innerHTML=''; }
 /* dimensions hud for hover */
 function showDims(el){
   const m2ps = parseFloat(document.getElementById('m2PerSquare').value)||4;
-  const squares = (el.clientWidth*el.clientHeight)/(GRID*GRID);
+  const squares = (el.clientWidth*el.clientHeight)/(40*40);
   const m2 = squares*m2ps;
   const lbl = document.createElement('div');
   lbl.className='dims';
-  lbl.textContent = `${(el.clientWidth/GRID*2).toFixed(2)}m × ${(el.clientHeight/GRID*2).toFixed(2)}m  ·  ${m2.toFixed(0)} m²`;
+  lbl.textContent = `${(el.clientWidth/40*2).toFixed(2)}m × ${(el.clientHeight/40*2).toFixed(2)}m  ·  ${m2.toFixed(0)} m²`;
   const x = parseFloat(el.style.left) + el.clientWidth/2 - 80;
   const y = parseFloat(el.style.top) - 26;
   lbl.style.left = x+'px'; lbl.style.top = y+'px';
@@ -433,7 +428,7 @@ function showDims(el){
 }
 function clearDims(){ hud.innerHTML=''; }
 
-/* attach interactions */
+/* attach interactions (v2.0.1: precision drag/resize) */
 function attachRoomInteractions(el){
   // hover dims
   el.addEventListener('pointerenter', ()=>{ clearDims(); showDims(el); });
@@ -441,49 +436,66 @@ function attachRoomInteractions(el){
 
   // select
   el.addEventListener('pointerdown', (e)=>{
-    if (e.button===2 || spacePan) return; // context/pan
-    if (e.target.classList.contains('handle')) return; // resizing
+    if (e.button===2 || spacePan) return;
+    if (e.target.classList.contains('handle')) return;
     toggleSelect(el, e.shiftKey);
   });
 
-  // drag (with snap + alt duplicate)
-  let dragging=false, sx=0, sy=0, start={x:0,y:0}, clone=null, alt=false;
+  // DRAG (CAD-accurate): screen deltas / scale, snap on release, multi-select
+  let dragging=false, startScreen={x:0,y:0};
+  let startPos = new Map(); // element -> {l,t}
+  let alt=false, clone=null;
+
   el.addEventListener('pointerdown', (e)=>{
     if (e.button===2 || spacePan) return;
     if (e.target.classList.contains('handle')) return;
-    const wpt = screenToWorld(e.clientX, e.clientY);
-    sx = wpt.x; sy = wpt.y;
-    start.x = parseFloat(el.style.left); start.y = parseFloat(el.style.top);
-    dragging=true; alt = e.altKey;
+
+    // ensure selection contains this
+    if (!selection.has(el)){ clearSelection(); selection.add(el); el.classList.add('sel'); }
+
+    // alt-duplicate: duplicate selected set, offset a bit
+    alt = e.altKey;
     if (alt){
-      clone = el.cloneNode(true);
-      levels[currentLevel].appendChild(clone);
-      attachRoomInteractions(clone);
-      el = clone; // switch to clone
-      selection.forEach(node=>node.classList.remove('sel')); selection.clear();
-      selection.add(el); el.classList.add('sel');
-    } else {
-      if (!selection.has(el)){ clearSelection(); selection.add(el); el.classList.add('sel'); }
+      const newSel = new Set();
+      selection.forEach(node=>{
+        const c = node.cloneNode(true);
+        levels[currentLevel].appendChild(c);
+        attachRoomInteractions(c);
+        c.style.left = (parseFloat(node.style.left)+40)+'px';
+        c.style.top  = (parseFloat(node.style.top)+40)+'px';
+        newSel.add(c);
+      });
+      clearSelection();
+      newSel.forEach(n=>{ n.classList.add('sel'); selection.add(n); });
     }
+
+    // start tracking
+    dragging = true;
+    startScreen = {x:e.clientX, y:e.clientY};
+    startPos.clear();
+    selection.forEach(node=>{
+      startPos.set(node, {l:parseFloat(node.style.left), t:parseFloat(node.style.top)});
+    });
     el.setPointerCapture(e.pointerId);
   });
 
   el.addEventListener('pointermove', (e)=>{
     if (!dragging) return;
     clearGuides(); clearDims();
-    const wpt = screenToWorld(e.clientX, e.clientY);
-    const dx = wpt.x - sx;
-    const dy = wpt.y - sy;
-    // move all selected
+
+    const dx = (e.clientX - startScreen.x) / scale;
+    const dy = (e.clientY - startScreen.y) / scale;
+
+    // move all selected by same delta (no snap yet)
     selection.forEach(node=>{
-      const nx = snap(parseFloat(node.style.left) + (node===el? dx : 0));
-      const ny = snap(parseFloat(node.style.top) + (node===el? dy : 0));
-      node.style.left = nx + 'px';
-      node.style.top  = ny + 'px';
+      const s = startPos.get(node);
+      node.style.left = (s.l + dx) + 'px';
+      node.style.top  = (s.t + dy) + 'px';
     });
-    // smart guides for current el vs others
+
+    // smart guides for primary el only (against non-selected)
     const others = getCurrentRooms().filter(n=>!selection.has(n));
-    const tol = 10; // px tolerance
+    const tol = 10;
     const lx = parseFloat(el.style.left), ty = parseFloat(el.style.top);
     const rx = lx + el.clientWidth, by = ty + el.clientHeight, cx = lx + el.clientWidth/2, cy = ty + el.clientHeight/2;
     others.forEach(o=>{
@@ -498,31 +510,54 @@ function attachRoomInteractions(el){
   });
 
   el.addEventListener('pointerup', ()=>{
-    if (dragging){ dragging=false; clearGuides(); saveLevel(currentLevel); refreshGhost(); showDims(el); }
+    if (!dragging) return;
+    dragging=false; clearGuides();
+
+    // apply snap (once) to selection for clean finish
+    selection.forEach(node=>{
+      const l = parseFloat(node.style.left), t=parseFloat(node.style.top);
+      node.style.left = snap(l)+'px';
+      node.style.top  = snap(t)+'px';
+    });
+
+    saveLevel(currentLevel); refreshGhost(); showDims(el);
   });
 
-  // resize (with snap)
-  let resizing=false, rsx=0, rsy=0, sw=0, sh=0;
+  // RESIZE (CAD-accurate): screen deltas / scale, snap on release
   const handle = el.querySelector('.handle');
+  let resizing=false, startSize={w:0,h:0}, startScreenRS={x:0,y:0};
+
   handle.addEventListener('pointerdown', (e)=>{
     resizing=true; e.stopPropagation();
-    const wpt = screenToWorld(e.clientX, e.clientY);
-    rsx = wpt.x; rsy = wpt.y;
-    sw = el.clientWidth; sh = el.clientHeight;
+    startScreenRS = {x:e.clientX, y:e.clientY};
+    startSize = {w: el.clientWidth, h: el.clientHeight};
     handle.setPointerCapture(e.pointerId);
   });
+
   handle.addEventListener('pointermove', (e)=>{
     if(!resizing) return;
     clearGuides(); clearDims();
-    const wpt = screenToWorld(e.clientX, e.clientY);
-    const dx = wpt.x - rsx, dy = wpt.y - rsy;
-    const W = Math.max(GRID, snap(sw + dx));
-    const H = Math.max(GRID, snap(sh + dy));
+
+    const dx = (e.clientX - startScreenRS.x) / scale;
+    const dy = (e.clientY - startScreenRS.y) / scale;
+
+    const W = Math.max(40, startSize.w + dx);
+    const H = Math.max(40, startSize.h + dy);
     el.style.width  = W + 'px';
     el.style.height = H + 'px';
   });
+
   handle.addEventListener('pointerup', ()=>{
-    if (resizing){ resizing=false; saveLevel(currentLevel); refreshGhost(); showDims(el); }
+    if (!resizing) return;
+    resizing=false;
+
+    // snap once on release
+    const W = snap(el.clientWidth);
+    const H = snap(el.clientHeight);
+    el.style.width  = Math.max(40, W) + 'px';
+    el.style.height = Math.max(40, H) + 'px';
+
+    saveLevel(currentLevel); refreshGhost(); showDims(el);
   });
 
   // area edit
@@ -538,11 +573,11 @@ function attachRoomInteractions(el){
       const m2ps = parseFloat(document.getElementById('m2PerSquare').value)||4;
       const squares = newM2/m2ps;
       const aspect = el.clientWidth / Math.max(1, el.clientHeight);
-      let W = Math.sqrt(squares*GRID*GRID*aspect);
-      let H = (squares*GRID*GRID)/W;
+      let W = Math.sqrt(squares*40*40*aspect);
+      let H = (squares*40*40)/W;
       if (snapEnabled){ W = snap(W); H = snap(H); }
-      el.style.width  = Math.max(GRID, W)+'px';
-      el.style.height = Math.max(GRID, H)+'px';
+      el.style.width  = Math.max(40, W)+'px';
+      el.style.height = Math.max(40, H)+'px';
       area.textContent = `${newM2.toFixed(0)} m²`;
       box.remove(); saveLevel(currentLevel); refreshGhost(); showDims(el);
     };
@@ -621,13 +656,12 @@ ctx.addEventListener('click', (e)=>{
   const act = e.target.closest('button')?.dataset?.act;
   if(!act) return;
   if (act==='dup'){
-    // duplicate each selected
     selection.forEach(node=>{
       const clone = node.cloneNode(true);
       levels[currentLevel].appendChild(clone);
       attachRoomInteractions(clone);
-      clone.style.left = (parseFloat(node.style.left)+GRID)+'px';
-      clone.style.top  = (parseFloat(node.style.top)+GRID)+'px';
+      clone.style.left = (parseFloat(node.style.left)+40)+'px';
+      clone.style.top  = (parseFloat(node.style.top)+40)+'px';
     });
     saveLevel(currentLevel); refreshGhost();
   }
@@ -715,7 +749,6 @@ function openAlignMenu(){
     <button data-k="dh">Distribute Horizontally</button>
     <button data-k="dv">Distribute Vertically</button>
   `;
-  // position at center of stage
   const r = stage.getBoundingClientRect();
   menu.style.left = (r.width/2-110) + 'px';
   menu.style.top  = (r.height/2-120) + 'px';
@@ -742,7 +775,6 @@ function openAlignMenu(){
    Export: PNG/SVG/DXF (current level only)
 =========================================================== */
 function exportPNG(){
-  // render current level to canvas (2D top view)
   const nodes = getCurrentRooms();
   if(!nodes.length) return alert('Nothing to export.');
   const bb = bbox(nodes);
@@ -752,16 +784,13 @@ function exportPNG(){
   const canvas = document.createElement('canvas');
   canvas.width = w; canvas.height = h;
   const ctx = canvas.getContext('2d');
-  // bg
   ctx.fillStyle = '#0b0f15'; ctx.fillRect(0,0,w,h);
-  // optional grid if enabled
   if (gridEnabled){
     ctx.strokeStyle = '#202734';
     ctx.lineWidth = 1;
-    for(let x=pad; x<w-pad; x+=GRID){ ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x,h); ctx.stroke(); }
-    for(let y=pad; y<h-pad; y+=GRID){ ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(w,y); ctx.stroke(); }
+    for(let x=pad; x<w-pad; x+=40){ ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x,h); ctx.stroke(); }
+    for(let y=pad; y<h-pad; y+=40){ ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(w,y); ctx.stroke(); }
   }
-  // draw blocks
   nodes.forEach(n=>{
     const x = parseFloat(n.style.left)-bb.l+pad;
     const y = parseFloat(n.style.top)-bb.t+pad;
@@ -789,8 +818,8 @@ function exportSVG(){
   svg+= `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}">\n`;
   svg+= `<rect x="0" y="0" width="${w}" height="${h}" fill="#0b0f15"/>\n`;
   if (gridEnabled){
-    for(let x=pad; x<w-pad; x+=GRID) svg+=`<line x1="${x}" y1="0" x2="${x}" y2="${h}" stroke="#202734" stroke-width="1"/>\n`;
-    for(let y=pad; y<h-pad; y+=GRID) svg+=`<line x1="0" y1="${y}" x2="${w}" y2="${y}" stroke="#202734" stroke-width="1"/>\n`;
+    for(let x=pad; x<w-pad; x+=40) svg+=`<line x1="${x}" y1="0" x2="${x}" y2="${h}" stroke="#202734" stroke-width="1"/>\n`;
+    for(let y=pad; y<h-pad; y+=40) svg+=`<line x1="0" y1="${y}" x2="${w}" y2="${y}" stroke="#202734" stroke-width="1"/>\n`;
   }
   nodes.forEach(n=>{
     const x = parseFloat(n.style.left)-bb.l+pad;
@@ -811,7 +840,7 @@ function exportSVG(){
 function exportDXF(){
   const nodes = getCurrentRooms();
   if(!nodes.length) return alert('Nothing to export.');
-  const bb = bbox(nodes); const pad=0; // origin at bb.l, bb.t
+  const bb = bbox(nodes);
   function entRect(x,y,w,h,layer){
     return `0
 LWPOLYLINE
@@ -872,8 +901,8 @@ SECTION
 ENTITIES
 `;
   nodes.forEach(n=>{
-    const x = parseFloat(n.style.left)-bb.l+pad;
-    const y = parseFloat(n.style.top)-bb.t+pad;
+    const x = parseFloat(n.style.left)-bb.l;
+    const y = parseFloat(n.style.top)-bb.t;
     const w = n.clientWidth, h=n.clientHeight;
     const name = n.querySelector('.label').textContent.replace(/\n/g,' ');
     const area = n.querySelector('.area').textContent.replace(/\n/g,' ');
@@ -886,7 +915,9 @@ ENDSEC
 0
 EOF`;
   const blob = new Blob([dxf],{type:'application/dxf'});
-  const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='plan.dxf'; a.click(); URL.revokeObjectURL(a.href);
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(blob); a.download='plan.dxf'; a.click();
+  URL.revokeObjectURL(a.href);
 }
 
 /* ===========================================================
@@ -904,7 +935,6 @@ document.getElementById('clearBtn').addEventListener('click', ()=>{
 });
 
 document.getElementById('m2PerSquare').addEventListener('change', ()=>{
-  // no automatic resize; used when editing areas
   saveLevel(currentLevel);
 });
 
@@ -932,16 +962,12 @@ exportMenu.addEventListener('click', (e)=>{
 });
 
 /* ===========================================================
-   Starter: add two sample blocks (remove if not needed)
+   Starter blocks
 =========================================================== */
 if (!localStorage.getItem('ap.level.0') && !localStorage.getItem('ap.level.1') && !localStorage.getItem('ap.level.2')){
   createRoom({name:'Childcare 1', m2:62, color:COLORS[0], x:0, y:0});
   createRoom({name:'Kinder 1', m2:100, color:COLORS[1], x:220, y:0});
 }
-
-/* ===========================================================
-   Add minimal keyboard-free UX done.
-=========================================================== */
 </script>
 </body>
 </html>
